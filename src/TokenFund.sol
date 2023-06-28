@@ -10,7 +10,7 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
  * @author Kate Johnson
  * @notice This contract allows users to deposit either DAI or USDC to be exchanged 50% for LINK and 50% for WETH. When user wants to withdraw, it converts the LINK or WETH tokens back to USDC or DAI. The contract is connected to UniswapV2 and SushiSwap to check which exchange will give the best price before performing the swap using the better exchange.
  *
- *  @dev In production adjust amount out minimum params from 0 to a reasonable amount to prevent front running attacks.
+ *  @dev Allows for 2% slippage on exchanges when conducting a swap.
  */
 
 contract TokenFund {
@@ -34,6 +34,12 @@ contract TokenFund {
      */
     address private immutable uniswapv2;
     address private immutable sushiswap;
+
+    /**
+     * @notice Allow for 2% slippage on exchanges
+     */
+    uint256 private constant SLIPPAGE = 98;
+    uint256 private constant SLIPPAGE_DECIMALS = 100;
 
     /* ========== EVENTS ========== */
     event Deposit(address indexed token, uint256 amountIn, uint256 linkAmountOut, uint256 wethAmountOut);
@@ -76,28 +82,37 @@ contract TokenFund {
         pathToWeth[0] = _token;
         pathToWeth[1] = WETH;
 
+        uint256 uniswapv2LinkAmount = _getPrice(uniswapv2, half, pathToLink);
+        uint256 sushiswapLinkAmount = _getPrice(sushiswap, half, pathToLink);
+
         // Swap half of the stable coin for LINK
-        if (_getPrice(uniswapv2, half, pathToLink) > _getPrice(sushiswap, half, pathToLink)) {
+        if (uniswapv2LinkAmount > sushiswapLinkAmount) {
             // Use Uniswap to swap to LINK
+            uint256 amountOutmin = (uniswapv2LinkAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(uniswapv2, half);
-            linkAmount = _swap(uniswapv2, half, 0, pathToLink, msg.sender, block.timestamp + 600);
+            linkAmount = _swap(uniswapv2, half, amountOutmin, pathToLink, msg.sender, block.timestamp + 600);
         } else {
             // Use SushiSwap to swap to LINK
+            uint256 amountOutMin = (sushiswapLinkAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(sushiswap, half);
-            linkAmount = _swap(sushiswap, half, 0, pathToLink, msg.sender, block.timestamp + 600);
+            linkAmount = _swap(sushiswap, half, amountOutMin, pathToLink, msg.sender, block.timestamp + 600);
         }
 
         // Swap the other half of the stable coin for WETH
         uint256 remaining = _amount - half;
+        uint256 uniswapv2WethAmount = _getPrice(uniswapv2, remaining, pathToWeth);
+        uint256 sushiswapWethAmount = _getPrice(sushiswap, remaining, pathToWeth);
 
-        if (_getPrice(uniswapv2, remaining, pathToWeth) > _getPrice(sushiswap, remaining, pathToWeth)) {
+        if (uniswapv2WethAmount > sushiswapWethAmount) {
             // Use Uniswap to swap to WETH
+            uint256 amountOutMin = (uniswapv2WethAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(uniswapv2, remaining);
-            wethAmount = _swap(uniswapv2, remaining, 0, pathToWeth, msg.sender, block.timestamp + 600);
+            wethAmount = _swap(uniswapv2, remaining, amountOutMin, pathToWeth, msg.sender, block.timestamp + 600);
         } else {
             // Use SushiSwap to swap to WETH
+            uint256 amountOutMin = (sushiswapWethAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(sushiswap, remaining);
-            wethAmount = _swap(sushiswap, remaining, 0, pathToWeth, msg.sender, block.timestamp + 600);
+            wethAmount = _swap(sushiswap, remaining, amountOutMin, pathToWeth, msg.sender, block.timestamp + 600);
         }
 
         emit Deposit(_token, _amount, linkAmount, wethAmount);
@@ -127,14 +142,19 @@ contract TokenFund {
         path[0] = _tokenIn;
         path[1] = _tokenOut;
 
-        if (_getPrice(uniswapv2, _amount, path) > _getPrice(sushiswap, _amount, path)) {
+        uint256 uniswapv2AmountOut = _getPrice(uniswapv2, _amount, path);
+        uint256 sushiswapAmountOut = _getPrice(sushiswap, _amount, path);
+
+        if (uniswapv2AmountOut > sushiswapAmountOut) {
             // Use Uniswap to swap to stable coin
+            uint256 amountOutMin = (uniswapv2AmountOut * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_tokenIn).safeIncreaseAllowance(uniswapv2, _amount);
-            amountOut = _swap(uniswapv2, _amount, 0, path, msg.sender, block.timestamp + 600);
+            amountOut = _swap(uniswapv2, _amount, amountOutMin, path, msg.sender, block.timestamp + 600);
         } else {
             // Use SushiSwap to swap to stable coin
+            uint256 amountOutMin = (sushiswapAmountOut * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_tokenIn).safeIncreaseAllowance(sushiswap, _amount);
-            amountOut = _swap(sushiswap, _amount, 0, path, msg.sender, block.timestamp + 600);
+            amountOut = _swap(sushiswap, _amount, amountOutMin, path, msg.sender, block.timestamp + 600);
         }
 
         emit Withdraw(_tokenIn, _tokenOut, _amount, amountOut);

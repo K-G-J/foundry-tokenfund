@@ -12,7 +12,7 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
  * @author Kate Johnson
  * @notice This contract provides the same functionality as TokenFund, but uses UniswapV3. The contract allows users to deposit either DAI or USDC to be exchanged 50% for LINK and 50% for WETH. When user wants to withdraw, it converts the LINK or WETH tokens back to USDC or DAI. The contract is connected to UniswapV3 and SushiSwap to check which exchange will give the best price before performing the swap using the better exchange.
  *
- * @dev In production adjust amount out minimum params from 0 to a reasonable amount to prevent front running attacks.
+ * @dev Allows for 2% slippage on exchanges when conducting a swap.
  */
 
 contract TokenFundV3 {
@@ -22,10 +22,10 @@ contract TokenFundV3 {
 
     /* ========== STATE VARIABLES ========== */
     using SafeERC20 for IERC20;
+
     /**
      * @notice Token addresses
      */
-
     address private immutable USDC;
     address private immutable DAI;
     address private immutable LINK;
@@ -37,6 +37,12 @@ contract TokenFundV3 {
     IQuoter private immutable uniswapQuoter;
     ISwapRouter private immutable uniswapv3;
     IUniswapV2Router02 private immutable sushiswap;
+
+    /**
+     * @notice Allow for 2% slippage on exchanges
+     */
+    uint256 private constant SLIPPAGE = 98;
+    uint256 private constant SLIPPAGE_DECIMALS = 100;
 
     /* ========== EVENTS ========== */
     event Deposit(address indexed token, uint256 amountIn, uint256 linkAmountOut, uint256 wethAmountOut);
@@ -88,28 +94,37 @@ contract TokenFundV3 {
         pathToWeth[0] = _token;
         pathToWeth[1] = WETH;
 
+        uint256 uniswapLinkAmount = _getUniswapPrice(_token, LINK, half);
+        uint256 sushiswapLinkAmount = _getSushiswapPrice(half, pathToLink);
+
         // Swap half of the stable coin for LINK
-        if (_getUniswapPrice(_token, LINK, half) > _getSushiswapPrice(half, pathToLink)) {
+        if (uniswapLinkAmount > sushiswapLinkAmount) {
             // Use Uniswap to swap to LINK
+            uint256 amountOutMinimum = (uniswapLinkAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(address(uniswapv3), half);
-            linkAmount = _uniswapSwap(_token, LINK, msg.sender, half);
+            linkAmount = _uniswapSwap(_token, LINK, msg.sender, half, amountOutMinimum);
         } else {
             // Use SushiSwap to swap to LINK
+            uint256 amountOutMin = (sushiswapLinkAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(address(sushiswap), half);
-            linkAmount = _sushiswapSwap(half, 0, pathToLink, msg.sender, block.timestamp + 600);
+            linkAmount = _sushiswapSwap(half, amountOutMin, pathToLink, msg.sender, block.timestamp + 600);
         }
 
         // Swap the other half of the stable coin for WETH
         uint256 remaining = _amount - half;
+        uint256 uniswapWethAmount = _getUniswapPrice(_token, WETH, remaining);
+        uint256 sushiswapWethAmount = _getSushiswapPrice(remaining, pathToWeth);
 
-        if (_getUniswapPrice(_token, WETH, remaining) > _getSushiswapPrice(remaining, pathToWeth)) {
+        if (uniswapWethAmount > sushiswapWethAmount) {
             // Use Uniswap to swap to WETH
+            uint256 amountOutMin = (uniswapWethAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(address(uniswapv3), remaining);
-            wethAmount = _uniswapSwap(_token, WETH, msg.sender, remaining);
+            wethAmount = _uniswapSwap(_token, WETH, msg.sender, remaining, amountOutMin);
         } else {
             // Use SushiSwap to swap to WETH
+            uint256 amountOutMin = (sushiswapWethAmount * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_token).safeIncreaseAllowance(address(sushiswap), remaining);
-            wethAmount = _sushiswapSwap(remaining, 0, pathToWeth, msg.sender, block.timestamp + 600);
+            wethAmount = _sushiswapSwap(remaining, amountOutMin, pathToWeth, msg.sender, block.timestamp + 600);
         }
 
         emit Deposit(_token, _amount, linkAmount, wethAmount);
@@ -139,14 +154,19 @@ contract TokenFundV3 {
         path[0] = _tokenIn;
         path[1] = _tokenOut;
 
-        if (_getUniswapPrice(_tokenIn, _tokenOut, _amount) > _getSushiswapPrice(_amount, path)) {
+        uint256 uniswapAmountOut = _getUniswapPrice(_tokenIn, _tokenOut, _amount);
+        uint256 sushiswapAmountOut = _getSushiswapPrice(_amount, path);
+
+        if (uniswapAmountOut > sushiswapAmountOut) {
             // Use Uniswap to swap to stable coin
+            uint256 amountOutMin = (uniswapAmountOut * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_tokenIn).safeIncreaseAllowance(address(uniswapv3), _amount);
-            amountOut = _uniswapSwap(_tokenIn, _tokenOut, msg.sender, _amount);
+            amountOut = _uniswapSwap(_tokenIn, _tokenOut, msg.sender, _amount, amountOutMin);
         } else {
             // Use SushiSwap to swap to stable coin
+            uint256 amountOutMin = (sushiswapAmountOut * SLIPPAGE) / SLIPPAGE_DECIMALS;
             IERC20(_tokenIn).safeIncreaseAllowance(address(sushiswap), _amount);
-            amountOut = _sushiswapSwap(_amount, 0, path, msg.sender, block.timestamp + 600);
+            amountOut = _sushiswapSwap(_amount, amountOutMin, path, msg.sender, block.timestamp + 600);
         }
 
         emit Withdraw(_tokenIn, _tokenOut, _amount, amountOut);
@@ -172,12 +192,16 @@ contract TokenFundV3 {
      * @param _tokenOut - the address of the token to receive from exchange
      * @param _recipient - recipient of the exchanged tokens
      * @param _amountIn - the amount of _tokenIn being swapped
+     * @param _amountOutMinimum - the minimum amount of _tokenOut to receive from the exchange
      * @return - the amount of _tokenOut recieved after executing the exchange
      */
-    function _uniswapSwap(address _tokenIn, address _tokenOut, address _recipient, uint256 _amountIn)
-        internal
-        returns (uint256)
-    {
+    function _uniswapSwap(
+        address _tokenIn,
+        address _tokenOut,
+        address _recipient,
+        uint256 _amountIn,
+        uint256 _amountOutMinimum
+    ) internal returns (uint256) {
         return uniswapv3.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: _tokenIn,
@@ -186,7 +210,7 @@ contract TokenFundV3 {
                 recipient: _recipient,
                 deadline: block.timestamp + 600,
                 amountIn: _amountIn,
-                amountOutMinimum: 0,
+                amountOutMinimum: _amountOutMinimum,
                 sqrtPriceLimitX96: 0
             })
         );
