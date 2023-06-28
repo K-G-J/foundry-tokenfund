@@ -38,6 +38,7 @@ contract TokenFundV3Test is Test {
     address[] wethPathToUsdc = [WETH, USDC];
 
     TokenFundV3 public tokenFundV3;
+    uint256 public depositAmount = 1 ether;
 
     /* ========== EVENTS ========== */
     event Deposit(address indexed token, uint256 amountIn, uint256 linkAmountOut, uint256 wethAmountOut);
@@ -81,21 +82,22 @@ contract TokenFundV3Test is Test {
 
     /* ========== deposit ========== */
     function test__depositInvalidTokenReverts() public {
-        uint256 depositAmount = 1 ether;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
 
-        vm.expectRevert("Invalid token: Only USDC or DAI allowed.");
+        vm.expectRevert(TokenFundV3.TokenFundV3__InvalidToken_Only_USDC_or_DAI_Allowed.selector);
         tokenFundV3.deposit(depositAmount, address(0x123));
     }
 
     function test__depositDai() public {
-        uint256 depositAmount = 1 ether;
+        uint256 half = depositAmount / 2;
+        uint256 remaining = depositAmount - half;
+
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
 
-        uint256 uniswapLinkAmount = getUniswapPrice(DAI, LINK, depositAmount / 2);
-        uint256 sushiswapLinkAmount = getSushiSwapPrice(depositAmount / 2, daiPathToLink);
-        uint256 uniswapWethAmount = getUniswapPrice(DAI, WETH, depositAmount / 2);
-        uint256 sushiswapWethAmount = getSushiSwapPrice(depositAmount / 2, daiPathToWeth);
+        uint256 uniswapLinkAmount = getUniswapPrice(DAI, LINK, half);
+        uint256 sushiswapLinkAmount = getSushiSwapPrice(half, daiPathToLink);
+        uint256 uniswapWethAmount = getUniswapPrice(DAI, WETH, remaining);
+        uint256 sushiswapWethAmount = getSushiSwapPrice(half, daiPathToWeth);
 
         assertEq(IERC20(LINK).balanceOf(address(this)), 0);
         assertEq(IERC20(WETH).balanceOf(address(this)), 0);
@@ -122,13 +124,15 @@ contract TokenFundV3Test is Test {
     }
 
     function test__depositUsdc() public {
-        uint256 depositAmount = 1 ether;
+        uint256 half = depositAmount / 2;
+        uint256 remaining = depositAmount - half;
+
         IERC20(USDC).approve(address(tokenFundV3), depositAmount);
 
-        uint256 uniswapLinkAmount = getUniswapPrice(USDC, LINK, depositAmount / 2);
-        uint256 sushiswapLinkAmount = getSushiSwapPrice(depositAmount / 2, usdcPathToLink);
-        uint256 uniswapWethAmount = getUniswapPrice(USDC, WETH, depositAmount / 2);
-        uint256 sushiswapWethAmount = getSushiSwapPrice(depositAmount / 2, usdcPathToWeth);
+        uint256 uniswapLinkAmount = getUniswapPrice(USDC, LINK, half);
+        uint256 sushiswapLinkAmount = getSushiSwapPrice(half, usdcPathToLink);
+        uint256 uniswapWethAmount = getUniswapPrice(USDC, WETH, remaining);
+        uint256 sushiswapWethAmount = getSushiSwapPrice(remaining, usdcPathToWeth);
 
         assertEq(IERC20(LINK).balanceOf(address(this)), 0);
         assertEq(IERC20(WETH).balanceOf(address(this)), 0);
@@ -155,18 +159,21 @@ contract TokenFundV3Test is Test {
     }
 
     function test__depositEvent() public {
-        uint256 depositAmount = 1 ether;
+        uint256 half = depositAmount / 2;
+        uint256 remaining = depositAmount - half;
+
         uint256 daiTolinkAmount;
         uint256 daiToWethAmount;
         uint256 usdcTolinkAmount;
         uint256 usdcToWethAmount;
+
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         IERC20(USDC).approve(address(tokenFundV3), depositAmount);
 
-        uint256 uniswapDaiLinkAmount = getUniswapPrice(DAI, LINK, depositAmount / 2);
-        uint256 sushiswapDaiLinkAmount = getSushiSwapPrice(depositAmount / 2, daiPathToLink);
-        uint256 uniswapDaiWethAmount = getUniswapPrice(DAI, WETH, depositAmount / 2);
-        uint256 sushiswapDaiWethAmount = getSushiSwapPrice(depositAmount / 2, daiPathToWeth);
+        uint256 uniswapDaiLinkAmount = getUniswapPrice(DAI, LINK, half);
+        uint256 sushiswapDaiLinkAmount = getSushiSwapPrice(half, daiPathToLink);
+        uint256 uniswapDaiWethAmount = getUniswapPrice(DAI, WETH, remaining);
+        uint256 sushiswapDaiWethAmount = getSushiSwapPrice(remaining, daiPathToWeth);
 
         if (uniswapDaiLinkAmount > sushiswapDaiLinkAmount) {
             daiTolinkAmount = uniswapDaiLinkAmount;
@@ -180,10 +187,10 @@ contract TokenFundV3Test is Test {
             daiToWethAmount = sushiswapDaiWethAmount;
         }
 
-        uint256 uniswapUsdcLinkAmount = getUniswapPrice(USDC, LINK, depositAmount / 2);
-        uint256 sushiswapUsdcLinkAmount = getSushiSwapPrice(depositAmount / 2, usdcPathToLink);
-        uint256 uniswapUsdcWethAmount = getUniswapPrice(USDC, WETH, depositAmount / 2);
-        uint256 sushiswapUsdcWethAmount = getSushiSwapPrice(depositAmount / 2, usdcPathToWeth);
+        uint256 uniswapUsdcLinkAmount = getUniswapPrice(USDC, LINK, half);
+        uint256 sushiswapUsdcLinkAmount = getSushiSwapPrice(half, usdcPathToLink);
+        uint256 uniswapUsdcWethAmount = getUniswapPrice(USDC, WETH, remaining);
+        uint256 sushiswapUsdcWethAmount = getSushiSwapPrice(remaining, usdcPathToWeth);
 
         if (uniswapUsdcLinkAmount > sushiswapUsdcLinkAmount) {
             usdcTolinkAmount = uniswapUsdcLinkAmount;
@@ -208,27 +215,24 @@ contract TokenFundV3Test is Test {
 
     /* ========== withdraw ========== */
     function test__withdrawInvalidTokenInReverts() public {
-        uint256 depositAmount = 1 ether;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         (uint256 linkAmount,) = tokenFundV3.deposit(depositAmount, DAI);
 
         IERC20(LINK).approve(address(tokenFundV3), linkAmount);
-        vm.expectRevert("Invalid token: Only LINK or WETH allowed.");
+        vm.expectRevert(TokenFundV3.TokenFundV3__InvalidToken_Only_LINK_or_WETH_Allowed.selector);
         tokenFundV3.withdraw(linkAmount, address(0x123), DAI);
     }
 
     function test__withdrawInvalidTokenOutReverts() public {
-        uint256 depositAmount = 1 ether;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         (uint256 linkAmount,) = tokenFundV3.deposit(depositAmount, DAI);
 
         IERC20(LINK).approve(address(tokenFundV3), linkAmount);
-        vm.expectRevert("Invalid token: Only USDC or DAI allowed.");
+        vm.expectRevert(TokenFundV3.TokenFundV3__InvalidToken_Only_USDC_or_DAI_Allowed.selector);
         tokenFundV3.withdraw(linkAmount, LINK, address(0x123));
     }
 
     function test__withdrawLinkDai() public {
-        uint256 depositAmount = 1 ether;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         (uint256 linkAmount,) = tokenFundV3.deposit(depositAmount, DAI);
 
@@ -253,7 +257,6 @@ contract TokenFundV3Test is Test {
     }
 
     function test__withdrawWethDai() public {
-        uint256 depositAmount = 1 ether;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         (, uint256 wethAmount) = tokenFundV3.deposit(depositAmount, DAI);
 
@@ -278,7 +281,6 @@ contract TokenFundV3Test is Test {
     }
 
     function test__withdrawLinkUsdc() public {
-        uint256 depositAmount = 1 ether;
         IERC20(USDC).approve(address(tokenFundV3), depositAmount);
         (uint256 linkAmount,) = tokenFundV3.deposit(depositAmount, USDC);
 
@@ -303,7 +305,6 @@ contract TokenFundV3Test is Test {
     }
 
     function test__withdrawWethUsdc() public {
-        uint256 depositAmount = 1 ether;
         IERC20(USDC).approve(address(tokenFundV3), depositAmount);
         (, uint256 wethAmount) = tokenFundV3.deposit(depositAmount, USDC);
 
@@ -328,7 +329,6 @@ contract TokenFundV3Test is Test {
     }
 
     function test__withdrawEvent() public {
-        uint256 depositAmount = 1 ether;
         uint256 daiAmount;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         (uint256 linkAmount,) = tokenFundV3.deposit(depositAmount, DAI);
@@ -350,22 +350,21 @@ contract TokenFundV3Test is Test {
 
     /* ========== FUZZ TESTS ========== */
 
-    function test__fuzz__depositDai(uint256 depositAmount) public {
-        vm.assume(depositAmount > IERC20(DAI).balanceOf(address(this)));
-        IERC20(DAI).approve(address(tokenFundV3), depositAmount);
+    function test__fuzz__depositDai(uint256 _depositAmount) public {
+        vm.assume(_depositAmount > IERC20(DAI).balanceOf(address(this)));
+        IERC20(DAI).approve(address(tokenFundV3), _depositAmount);
         vm.expectRevert("Dai/insufficient-balance");
-        tokenFundV3.deposit(depositAmount, DAI);
+        tokenFundV3.deposit(_depositAmount, DAI);
     }
 
-    function test__fuzz__depositUsdc(uint256 depositAmount) public {
-        vm.assume(depositAmount > IERC20(USDC).balanceOf(address(this)));
-        IERC20(USDC).approve(address(tokenFundV3), depositAmount);
+    function test__fuzz__depositUsdc(uint256 _depositAmount) public {
+        vm.assume(_depositAmount > IERC20(USDC).balanceOf(address(this)));
+        IERC20(USDC).approve(address(tokenFundV3), _depositAmount);
         vm.expectRevert("ERC20: transfer amount exceeds balance");
-        tokenFundV3.deposit(depositAmount, USDC);
+        tokenFundV3.deposit(_depositAmount, USDC);
     }
 
     function test__fuzz__withdrawLinkDai(uint256 amount) public {
-        uint256 depositAmount = 1 ether;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         tokenFundV3.deposit(depositAmount, DAI);
 
@@ -377,7 +376,6 @@ contract TokenFundV3Test is Test {
     }
 
     function test__fuzz__withdrawWethDai(uint256 amount) public {
-        uint256 depositAmount = 1 ether;
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
         tokenFundV3.deposit(depositAmount, DAI);
 
@@ -389,7 +387,6 @@ contract TokenFundV3Test is Test {
     }
 
     function test__fuzz__withdrawLinkUsdc(uint256 amount) public {
-        uint256 depositAmount = 1 ether;
         IERC20(USDC).approve(address(tokenFundV3), depositAmount);
         tokenFundV3.deposit(depositAmount, USDC);
 
@@ -401,7 +398,6 @@ contract TokenFundV3Test is Test {
     }
 
     function test__fuzz__withdrawWethUsdc(uint256 amount) public {
-        uint256 depositAmount = 1 ether;
         IERC20(USDC).approve(address(tokenFundV3), depositAmount);
         tokenFundV3.deposit(depositAmount, USDC);
 

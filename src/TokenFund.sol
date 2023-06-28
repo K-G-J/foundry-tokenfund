@@ -14,6 +14,10 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
  */
 
 contract TokenFund {
+    /* ========== ERRORS ========== */
+    error TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed();
+    error TokenFund__InvalidToken_Only_LINK_or_WETH_Allowed();
+
     /* ========== STATE VARIABLES ========== */
     using SafeERC20 for IERC20;
     /**
@@ -55,11 +59,11 @@ contract TokenFund {
      * @return wethAmount - the amount of WETH tokens received after executing the exchange
      */
     function deposit(uint256 _amount, address _token) external returns (uint256 linkAmount, uint256 wethAmount) {
-        require(_token == USDC || _token == DAI, "Invalid token: Only USDC or DAI allowed.");
+        if (_token != USDC && _token != DAI) {
+            revert TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed();
+        }
 
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
-        IERC20(_token).safeIncreaseAllowance(uniswapv2, _amount);
-        IERC20(_token).safeIncreaseAllowance(sushiswap, _amount);
 
         uint256 half = _amount / 2;
 
@@ -75,9 +79,11 @@ contract TokenFund {
         // Swap half of the stable coin for LINK
         if (_getPrice(uniswapv2, half, pathToLink) > _getPrice(sushiswap, half, pathToLink)) {
             // Use Uniswap to swap to LINK
+            IERC20(_token).safeIncreaseAllowance(uniswapv2, half);
             linkAmount = _swap(uniswapv2, half, 0, pathToLink, msg.sender, block.timestamp + 600);
         } else {
             // Use SushiSwap to swap to LINK
+            IERC20(_token).safeIncreaseAllowance(sushiswap, half);
             linkAmount = _swap(sushiswap, half, 0, pathToLink, msg.sender, block.timestamp + 600);
         }
 
@@ -86,9 +92,11 @@ contract TokenFund {
 
         if (_getPrice(uniswapv2, remaining, pathToWeth) > _getPrice(sushiswap, remaining, pathToWeth)) {
             // Use Uniswap to swap to WETH
+            IERC20(_token).safeIncreaseAllowance(uniswapv2, remaining);
             wethAmount = _swap(uniswapv2, remaining, 0, pathToWeth, msg.sender, block.timestamp + 600);
         } else {
             // Use SushiSwap to swap to WETH
+            IERC20(_token).safeIncreaseAllowance(sushiswap, remaining);
             wethAmount = _swap(sushiswap, remaining, 0, pathToWeth, msg.sender, block.timestamp + 600);
         }
 
@@ -105,12 +113,14 @@ contract TokenFund {
      * @return amountOut - the amount of stable coin received after executing the exchange
      */
     function withdraw(uint256 _amount, address _tokenIn, address _tokenOut) external returns (uint256 amountOut) {
-        require(_tokenIn == LINK || _tokenIn == WETH, "Invalid token: Only LINK or WETH allowed.");
-        require(_tokenOut == USDC || _tokenOut == DAI, "Invalid token: Only USDC or DAI allowed.");
+        if (_tokenIn != LINK && _tokenIn != WETH) {
+            revert TokenFund__InvalidToken_Only_LINK_or_WETH_Allowed();
+        }
+        if (_tokenOut != USDC && _tokenOut != DAI) {
+            revert TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed();
+        }
 
         IERC20(_tokenIn).safeTransferFrom(msg.sender, address(this), _amount);
-        IERC20(_tokenIn).safeIncreaseAllowance(uniswapv2, _amount);
-        IERC20(_tokenIn).safeIncreaseAllowance(sushiswap, _amount);
 
         address[] memory path = new address[](2);
 
@@ -119,9 +129,11 @@ contract TokenFund {
 
         if (_getPrice(uniswapv2, _amount, path) > _getPrice(sushiswap, _amount, path)) {
             // Use Uniswap to swap to stable coin
+            IERC20(_tokenIn).safeIncreaseAllowance(uniswapv2, _amount);
             amountOut = _swap(uniswapv2, _amount, 0, path, msg.sender, block.timestamp + 600);
         } else {
             // Use SushiSwap to swap to stable coin
+            IERC20(_tokenIn).safeIncreaseAllowance(sushiswap, _amount);
             amountOut = _swap(sushiswap, _amount, 0, path, msg.sender, block.timestamp + 600);
         }
 

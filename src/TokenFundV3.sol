@@ -16,6 +16,10 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
  */
 
 contract TokenFundV3 {
+    /* ========== ERRORS ========== */
+    error TokenFundV3__InvalidToken_Only_USDC_or_DAI_Allowed();
+    error TokenFundV3__InvalidToken_Only_LINK_or_WETH_Allowed();
+
     /* ========== STATE VARIABLES ========== */
     using SafeERC20 for IERC20;
     /**
@@ -67,11 +71,11 @@ contract TokenFundV3 {
      * @return wethAmount - the amount of WETH tokens received after executing the exchange
      */
     function deposit(uint256 _amount, address _token) external returns (uint256 linkAmount, uint256 wethAmount) {
-        require(_token == USDC || _token == DAI, "Invalid token: Only USDC or DAI allowed.");
+        if (_token != USDC && _token != DAI) {
+            revert TokenFundV3__InvalidToken_Only_USDC_or_DAI_Allowed();
+        }
 
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
-        IERC20(_token).safeIncreaseAllowance(address(uniswapv3), _amount);
-        IERC20(_token).safeIncreaseAllowance(address(sushiswap), _amount);
 
         uint256 half = _amount / 2;
 
@@ -87,9 +91,11 @@ contract TokenFundV3 {
         // Swap half of the stable coin for LINK
         if (_getUniswapPrice(_token, LINK, half) > _getSushiswapPrice(half, pathToLink)) {
             // Use Uniswap to swap to LINK
+            IERC20(_token).safeIncreaseAllowance(address(uniswapv3), half);
             linkAmount = _uniswapSwap(_token, LINK, msg.sender, half);
         } else {
             // Use SushiSwap to swap to LINK
+            IERC20(_token).safeIncreaseAllowance(address(sushiswap), half);
             linkAmount = _sushiswapSwap(half, 0, pathToLink, msg.sender, block.timestamp + 600);
         }
 
@@ -98,9 +104,11 @@ contract TokenFundV3 {
 
         if (_getUniswapPrice(_token, WETH, remaining) > _getSushiswapPrice(remaining, pathToWeth)) {
             // Use Uniswap to swap to WETH
+            IERC20(_token).safeIncreaseAllowance(address(uniswapv3), remaining);
             wethAmount = _uniswapSwap(_token, WETH, msg.sender, remaining);
         } else {
             // Use SushiSwap to swap to WETH
+            IERC20(_token).safeIncreaseAllowance(address(sushiswap), remaining);
             wethAmount = _sushiswapSwap(remaining, 0, pathToWeth, msg.sender, block.timestamp + 600);
         }
 
@@ -117,12 +125,14 @@ contract TokenFundV3 {
      * @return amountOut - the amount of stable coin received after executing the exchange
      */
     function withdraw(uint256 _amount, address _tokenIn, address _tokenOut) external returns (uint256 amountOut) {
-        require(_tokenIn == LINK || _tokenIn == WETH, "Invalid token: Only LINK or WETH allowed.");
-        require(_tokenOut == USDC || _tokenOut == DAI, "Invalid token: Only USDC or DAI allowed.");
+        if (_tokenIn != LINK && _tokenIn != WETH) {
+            revert TokenFundV3__InvalidToken_Only_LINK_or_WETH_Allowed();
+        }
+        if (_tokenOut != USDC && _tokenOut != DAI) {
+            revert TokenFundV3__InvalidToken_Only_USDC_or_DAI_Allowed();
+        }
 
         IERC20(_tokenIn).safeTransferFrom(msg.sender, address(this), _amount);
-        IERC20(_tokenIn).safeIncreaseAllowance(address(uniswapv3), _amount);
-        IERC20(_tokenIn).safeIncreaseAllowance(address(sushiswap), _amount);
 
         address[] memory path = new address[](2);
 
@@ -131,9 +141,11 @@ contract TokenFundV3 {
 
         if (_getUniswapPrice(_tokenIn, _tokenOut, _amount) > _getSushiswapPrice(_amount, path)) {
             // Use Uniswap to swap to stable coin
+            IERC20(_tokenIn).safeIncreaseAllowance(address(uniswapv3), _amount);
             amountOut = _uniswapSwap(_tokenIn, _tokenOut, msg.sender, _amount);
         } else {
             // Use SushiSwap to swap to stable coin
+            IERC20(_tokenIn).safeIncreaseAllowance(address(sushiswap), _amount);
             amountOut = _sushiswapSwap(_amount, 0, path, msg.sender, block.timestamp + 600);
         }
 
@@ -166,17 +178,18 @@ contract TokenFundV3 {
         internal
         returns (uint256)
     {
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: _tokenIn,
-            tokenOut: _tokenOut,
-            fee: 3000,
-            recipient: _recipient,
-            deadline: block.timestamp + 600,
-            amountIn: _amountIn,
-            amountOutMinimum: 0,
-            sqrtPriceLimitX96: 0
-        });
-        return uniswapv3.exactInputSingle(params);
+        return uniswapv3.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: _tokenIn,
+                tokenOut: _tokenOut,
+                fee: 3000,
+                recipient: _recipient,
+                deadline: block.timestamp + 600,
+                amountIn: _amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
     }
 
     /**
