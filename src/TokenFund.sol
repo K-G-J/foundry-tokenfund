@@ -15,8 +15,8 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
 
 contract TokenFund {
     /* ========== ERRORS ========== */
-    error TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed();
-    error TokenFund__InvalidToken_Only_LINK_or_WETH_Allowed();
+    error TokenFund_Invalid_Token_Only_USDC_or_DAI_Allowed();
+    error TokenFund_Invalid_Token_Only_LINK_or_WETH_Allowed();
 
     /* ========== STATE VARIABLES ========== */
     using SafeERC20 for IERC20;
@@ -66,7 +66,7 @@ contract TokenFund {
      */
     function deposit(uint256 _amount, address _token) external returns (uint256 linkAmount, uint256 wethAmount) {
         if (_token != USDC && _token != DAI) {
-            revert TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed();
+            revert TokenFund_Invalid_Token_Only_USDC_or_DAI_Allowed();
         }
 
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
@@ -129,10 +129,10 @@ contract TokenFund {
      */
     function withdraw(uint256 _amount, address _tokenIn, address _tokenOut) external returns (uint256 amountOut) {
         if (_tokenIn != LINK && _tokenIn != WETH) {
-            revert TokenFund__InvalidToken_Only_LINK_or_WETH_Allowed();
+            revert TokenFund_Invalid_Token_Only_LINK_or_WETH_Allowed();
         }
         if (_tokenOut != USDC && _tokenOut != DAI) {
-            revert TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed();
+            revert TokenFund_Invalid_Token_Only_USDC_or_DAI_Allowed();
         }
 
         IERC20(_tokenIn).safeTransferFrom(msg.sender, address(this), _amount);

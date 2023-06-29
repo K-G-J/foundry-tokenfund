@@ -80,7 +80,7 @@ contract TokenFundTest is Test {
     function test__depositInvalidTokenReverts() public {
         IERC20(DAI).approve(address(tokenFund), depositAmount);
 
-        vm.expectRevert(TokenFund.TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed.selector);
+        vm.expectRevert(TokenFund.TokenFund_Invalid_Token_Only_USDC_or_DAI_Allowed.selector);
         tokenFund.deposit(depositAmount, address(0x123));
     }
 
@@ -214,7 +214,7 @@ contract TokenFundTest is Test {
         (uint256 linkAmount,) = tokenFund.deposit(depositAmount, DAI);
 
         IERC20(LINK).approve(address(tokenFund), linkAmount);
-        vm.expectRevert(TokenFund.TokenFund__InvalidToken_Only_LINK_or_WETH_Allowed.selector);
+        vm.expectRevert(TokenFund.TokenFund_Invalid_Token_Only_LINK_or_WETH_Allowed.selector);
         tokenFund.withdraw(linkAmount, address(0x123), DAI);
     }
 
@@ -223,7 +223,7 @@ contract TokenFundTest is Test {
         (uint256 linkAmount,) = tokenFund.deposit(depositAmount, DAI);
 
         IERC20(LINK).approve(address(tokenFund), linkAmount);
-        vm.expectRevert(TokenFund.TokenFund__InvalidToken_Only_USDC_or_DAI_Allowed.selector);
+        vm.expectRevert(TokenFund.TokenFund_Invalid_Token_Only_USDC_or_DAI_Allowed.selector);
         tokenFund.withdraw(linkAmount, LINK, address(0x123));
     }
 

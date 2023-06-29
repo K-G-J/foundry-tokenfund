@@ -84,7 +84,7 @@ contract TokenFundV3Test is Test {
     function test__depositInvalidTokenReverts() public {
         IERC20(DAI).approve(address(tokenFundV3), depositAmount);
 
-        vm.expectRevert(TokenFundV3.TokenFundV3__InvalidToken_Only_USDC_or_DAI_Allowed.selector);
+        vm.expectRevert(TokenFundV3.TokenFundV3_Invalid_Token_Only_USDC_or_DAI_Allowed.selector);
         tokenFundV3.deposit(depositAmount, address(0x123));
     }
 
@@ -219,7 +219,7 @@ contract TokenFundV3Test is Test {
         (uint256 linkAmount,) = tokenFundV3.deposit(depositAmount, DAI);
 
         IERC20(LINK).approve(address(tokenFundV3), linkAmount);
-        vm.expectRevert(TokenFundV3.TokenFundV3__InvalidToken_Only_LINK_or_WETH_Allowed.selector);
+        vm.expectRevert(TokenFundV3.TokenFundV3_Invalid_Token_Only_LINK_or_WETH_Allowed.selector);
         tokenFundV3.withdraw(linkAmount, address(0x123), DAI);
     }
 
@@ -228,7 +228,7 @@ contract TokenFundV3Test is Test {
         (uint256 linkAmount,) = tokenFundV3.deposit(depositAmount, DAI);
 
         IERC20(LINK).approve(address(tokenFundV3), linkAmount);
-        vm.expectRevert(TokenFundV3.TokenFundV3__InvalidToken_Only_USDC_or_DAI_Allowed.selector);
+        vm.expectRevert(TokenFundV3.TokenFundV3_Invalid_Token_Only_USDC_or_DAI_Allowed.selector);
         tokenFundV3.withdraw(linkAmount, LINK, address(0x123));
     }
 
