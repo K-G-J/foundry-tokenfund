@@ -15,6 +15,7 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
 
 contract TokenFund {
     /* ========== ERRORS ========== */
+    error TokenFund_Zero_Amount();
     error TokenFund_Invalid_Token_Only_USDC_or_DAI_Allowed();
     error TokenFund_Invalid_Token_Only_LINK_or_WETH_Allowed();
 
@@ -65,6 +66,10 @@ contract TokenFund {
      * @return wethAmount - the amount of WETH tokens received after executing the exchange
      */
     function deposit(uint256 _amount, address _token) external returns (uint256 linkAmount, uint256 wethAmount) {
+        if (_amount <= 0) {
+            revert TokenFund_Zero_Amount();
+        }
+
         if (_token != USDC && _token != DAI) {
             revert TokenFund_Invalid_Token_Only_USDC_or_DAI_Allowed();
         }
@@ -128,6 +133,9 @@ contract TokenFund {
      * @return amountOut - the amount of stable coin received after executing the exchange
      */
     function withdraw(uint256 _amount, address _tokenIn, address _tokenOut) external returns (uint256 amountOut) {
+        if (_amount <= 0) {
+            revert TokenFund_Zero_Amount();
+        }
         if (_tokenIn != LINK && _tokenIn != WETH) {
             revert TokenFund_Invalid_Token_Only_LINK_or_WETH_Allowed();
         }
